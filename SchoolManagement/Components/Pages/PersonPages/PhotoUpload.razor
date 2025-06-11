@@ -1,0 +1,191 @@
+@page "/photo"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.FluentUI.AspNetCore.Components
+@using SchoolManagementApp.Models
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.Processing
+
+@inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+
+@if (Person == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <h4>Upload Photo for @Person.Name</h4>
+
+    <FluentButton Appearance="Appearance.Accent">
+         Choose File
+    </FluentButton>
+    <FluentInputFile OnInputFileChange="OnFileSelected"
+                     Accept="image/*"
+                     Multiple="true"/>
+
+ 
+    <FluentButton @onclick="UploadPhotoAsync"
+                  Disabled="@(!SelectedFiles.Any())"
+                  Class="ms-2"
+                  Appearance="Appearance.Accent">
+        Upload
+    </FluentButton>
+
+ @*    @if (ImagePreviews.Any())
+    {
+        <div class="mt-4 d-flex flex-wrap gap-3">
+            @foreach (var preview in ImagePreviews)
+            {
+                <FluentCard Style="width: 220px;">
+                    <img src="@preview" style="width: 100%; border-radius: 8px;" />
+                    <div class="p-2 text-center">
+                        <strong>Preview</strong>
+                    </div>
+                </FluentCard>
+            }
+        </div>
+    } *@
+
+
+    @for (int i = 0; i < ImagePreviews.Count; i++)
+    {
+        var index = i; // Safely capture index
+
+        <FluentCard Style="width: 220px; position: relative;">
+            <img src="@ImagePreviews[index]" style="width: 100%; border-radius: 8px;" />
+
+            <FluentButton Style="position: absolute; top: 6px; right: 6px; z-index: 10;"
+                          Appearance="Appearance.Stealth"
+                          OnClick="@(() => RemovePreview(index))">
+                <i class="bi bi-trash"></i> 
+            </FluentButton>
+
+            <div class="p-2 text-center">
+                <strong>Preview</strong>
+            </div>
+        </FluentCard>
+    }
+
+
+
+}
+
+@code {
+    [Parameter]
+    public int PersonId { get; set; }
+
+    private Person? Person;
+    private List<IBrowserFile> SelectedFiles = new();
+    private List<string> ImagePreviews = new();
+    private List<string> UploadedPaths = new();
+
+    // private IBrowserFile? selectedFile;
+    // private string? UploadedPath;
+    //private bool IsFileSelected => selectedFile is not null;
+   // private FluentInputFile? inputFileRef;
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        Person = await context.Person.FindAsync(PersonId);
+    }
+
+    private async void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        //SelectedFile = e.File;
+        // Get all selected image files and store them in a list
+        SelectedFiles = e.GetMultipleFiles().ToList();
+        ImagePreviews.Clear();
+
+        foreach (var file in SelectedFiles)
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            var imageUrl = $"data:{file.ContentType};base64,{base64}";
+            ImagePreviews.Add(imageUrl);
+        }
+
+        StateHasChanged();
+    }
+
+ 
+    private async Task UploadPhotoAsync()
+    {
+        if (Person == null || !SelectedFiles.Any())
+            return;
+
+        // Sanitize the person's name to be used safely in the folder name (remove invalid characters)
+        var safeName = string.Join("_", Person.Name.Split(Path.GetInvalidFileNameChars()));
+
+        // Create a folder name based on PersonID and the sanitized name
+        var folderName = $"{Person.PersonID}_{safeName}";  
+        
+        // Relative path (from wwwroot) for saving images
+        var relativeFolder = Path.Combine("images", folderName);
+
+        // Absolute path on the server where images will be stored
+        var absoluteFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relativeFolder);
+
+        // Make the folder if it does not exist
+        Directory.CreateDirectory(absoluteFolder);
+
+        using var context = DbFactory.CreateDbContext();
+
+        foreach (var file in SelectedFiles)
+        {
+            // Generate a unique file name to avoid overwriting existing files
+            var uniqueFileName = $"{Guid.NewGuid()}_{file.Name}";
+
+            // Full path where the image will be saved on the server
+            var absolutePath = Path.Combine(absoluteFolder, uniqueFileName);
+
+            // Convert file path to web-friendly format (forward slashes)
+            var relativePath = Path.Combine(relativeFolder, uniqueFileName).Replace("\\", "/");
+
+            // Resize the image to 300x300 using ImageSharp
+            await using var inputStream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var image = await SixLabors.ImageSharp.Image.LoadAsync(inputStream);
+
+            image.Mutate(x => x.Resize(300, 300));
+
+            // Save the file to the server
+            await using var outputStream = new FileStream(absolutePath, FileMode.Create);
+
+           // await file.OpenReadStream().CopyToAsync(outputStream);
+            await image.SaveAsJpegAsync(outputStream); // You can also use SaveAsPngAsync()
+
+            
+            context.PersonPhoto.Add(new PersonPhoto
+                {
+                    PersonID = Person.PersonID,
+                    Photopath = relativePath,
+                    CreatedDate = DateTime.Now
+                });
+
+            // Save the path for showing uploaded photos later
+            UploadedPaths.Add("/" + relativePath);
+        }
+
+        await context.SaveChangesAsync();
+        // Clear selected files and image previews after successful upload
+        SelectedFiles.Clear();
+        ImagePreviews.Clear();
+    }
+
+    private void RemovePreview(int index)
+    {
+        if (index >= 0 && index < ImagePreviews.Count && index < SelectedFiles.Count)
+        {
+            ImagePreviews.RemoveAt(index);
+            SelectedFiles.RemoveAt(index);
+            StateHasChanged(); 
+        }
+    }
+
+}

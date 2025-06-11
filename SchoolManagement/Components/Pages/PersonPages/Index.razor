@@ -1,0 +1,38 @@
+﻿@page "/people"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using SchoolManagementApp.Models
+@using SchoolManagementApp.Data
+@implements IAsyncDisposable
+@inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
+
+<PageTitle>Index</PageTitle>
+
+<h1>Index</h1>
+
+<p>
+    <a href="people/create">Create New</a>
+</p>
+
+<QuickGrid Class="table" Items="context.Person">
+    <PropertyColumn Property="person => person.Name" />
+    <PropertyColumn Property="person => person.Gender" />
+    <PropertyColumn Property="person => person.CreatedDate" />
+
+    <TemplateColumn Context="person">
+        <a href="@($"people/edit?personid={person.PersonID}")">Edit</a> |
+        <a href="@($"people/details?personid={person.PersonID}")">Details</a> |
+        <a href="@($"people/delete?personid={person.PersonID}")">Delete</a>
+    </TemplateColumn>
+</QuickGrid>
+
+@code {
+    private SchoolManagementDbContext context = default!;
+
+    protected override void OnInitialized()
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

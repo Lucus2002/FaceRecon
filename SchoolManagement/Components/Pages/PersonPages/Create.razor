@@ -1,0 +1,54 @@
+﻿@page "/people/create"
+@using Microsoft.EntityFrameworkCore
+@using SchoolManagementApp.Models
+@inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create</PageTitle>
+
+<h1>Create</h1>
+
+<h2>Person</h2>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <EditForm method="post" Model="Person" OnValidSubmit="AddPerson" FormName="create" Enhance>
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert"/>
+            <div class="mb-3">
+                <label for="name" class="form-label">Name:</label> 
+                <InputText id="name" @bind-Value="Person.Name" class="form-control" /> 
+                <ValidationMessage For="() => Person.Name" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="gender" class="form-label">Gender:</label> 
+                <InputText id="gender" @bind-Value="Person.Gender" class="form-control" /> 
+                <ValidationMessage For="() => Person.Gender" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="createddate" class="form-label">CreatedDate:</label> 
+                <InputDate id="createddate" @bind-Value="Person.CreatedDate" class="form-control" /> 
+                <ValidationMessage For="() => Person.CreatedDate" class="text-danger" /> 
+            </div>        
+            <button type="submit" class="btn btn-primary">Create</button>
+        </EditForm>
+    </div>
+</div>
+
+<div>
+    <a href="/people">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Person Person { get; set; } = new();
+
+    // To protect from overposting attacks, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task AddPerson()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Person.Add(Person);
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/people");
+    }
+}

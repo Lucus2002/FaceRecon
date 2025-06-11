@@ -1,0 +1,82 @@
+﻿@page "/people/details"
+@using Microsoft.EntityFrameworkCore
+@using SchoolManagementApp.Models
+@inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Details</PageTitle>
+
+<h1>Details</h1>
+
+<div>
+    <h2>Person</h2>
+    <hr />
+    @if (person is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Name</dt>
+            <dd class="col-sm-10">@person.Name</dd>
+            <dt class="col-sm-2">Gender</dt>
+            <dd class="col-sm-10">@person.Gender</dd>
+            <dt class="col-sm-2">CreatedDate</dt>
+            <dd class="col-sm-10">@person.CreatedDate</dd>
+        </dl>
+        <div>
+            <a href="@($"/people/edit?personid={person.PersonID}")">Edit</a> |
+            <a href="@($"/people")">Back to List</a>
+        </div>
+
+              <h5>Uploaded Photos</h5>
+
+        @if (photos.Count == 0)
+        {
+            <p>No photos uploaded yet.</p>
+        }
+        else
+        {
+            <div class="d-flex flex-wrap gap-3">
+                @foreach (var photo in photos)
+                {
+                    <img src="@("/" + photo.Photopath)" alt="Uploaded photo" width="200" style="border: 1px solid #ccc;" />
+                }
+            </div>
+        }
+
+        <hr />
+
+        <PhotoUpload PersonId="@person.PersonID" />
+       
+
+}
+
+   
+</div>
+
+
+  
+@code {
+    private Person? person;
+    private List<PersonPhoto> photos = new();
+    [SupplyParameterFromQuery]
+    private int PersonID { get; set; }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        person = await context.Person.FirstOrDefaultAsync(m => m.PersonID == PersonID);
+
+        if (person is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+        }
+
+        photos = await context.PersonPhoto
+     .Where(p => p.PersonID == PersonID)
+     .ToListAsync();
+    }
+}

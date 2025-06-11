@@ -1,0 +1,101 @@
+﻿@page "/people/edit"
+@using Microsoft.EntityFrameworkCore
+@using SchoolManagementApp.Models
+@inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit</PageTitle>
+
+<h1>Edit</h1>
+
+<h2>Person</h2>
+<hr />
+@if (Person is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm method="post" Model="Person" OnValidSubmit="UpdatePerson" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert"/>
+                <input type="hidden" name="Person.PersonID" value="@Person.PersonID" />
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name:</label>
+                    <InputText id="name" @bind-Value="Person.Name" class="form-control" />
+                    <ValidationMessage For="() => Person.Name" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="gender" class="form-label">Gender:</label>
+                    <InputText id="gender" @bind-Value="Person.Gender" class="form-control" />
+                    <ValidationMessage For="() => Person.Gender" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="createddate" class="form-label">CreatedDate:</label>
+                    <InputDate id="createddate" @bind-Value="Person.CreatedDate" class="form-control" />
+                    <ValidationMessage For="() => Person.CreatedDate" class="text-danger" />
+                </div>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/people">Back to List</a>
+</div>
+
+
+
+@code {
+    [SupplyParameterFromQuery]
+    private int PersonID { get; set; }
+
+    [SupplyParameterFromForm]
+    private Person? Person { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        Person ??= await context.Person.FirstOrDefaultAsync(m => m.PersonID == PersonID);
+
+        if (Person is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+        }
+    }
+
+    // To protect from overposting attacks, enable the specific properties you want to bind to.
+    // For more information, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task UpdatePerson()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Attach(Person!).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!PersonExists(Person!.PersonID))
+            {
+                NavigationManager.NavigateTo("notfound");
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        NavigationManager.NavigateTo("/people");
+    }
+
+    private bool PersonExists(int personid)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.Person.Any(e => e.PersonID == personid);
+    }
+}
