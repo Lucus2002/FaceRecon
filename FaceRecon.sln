@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FaceONNX", "FaceONNX\FaceON
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FaceEmbeddingClassification", "FaceEmbeddingClassification\FaceEmbeddingClassification.csproj", "{05EF9F41-36AC-5263-D762-D565169CC5D1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchoolManagement", "SchoolManagement\SchoolManagement.csproj", "{40AF0CDC-7B4E-4086-9893-D6B6FAD18863}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchoolManagementApp", "SchoolManagement\SchoolManagementApp.csproj", "{40AF0CDC-7B4E-4086-9893-D6B6FAD18863}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
