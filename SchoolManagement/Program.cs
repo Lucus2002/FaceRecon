@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Sqlite;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.QuickGrid;
 using SchoolManagementApp.Components;
@@ -31,16 +32,25 @@ builder.Services.AddAuthentication(options =>
     .AddIdentityCookies();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContextFactory<SchoolManagementDbContext>(options =>
-    options.UseSqlServer(connectionString));
+//builder.Services.AddDbContextFactory<SchoolManagementDbContext>(options =>
+//    options.UseSqlServer(connectionString));
 
 builder.Services.AddQuickGridEntityFrameworkAdapter();
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
+builder.Services.AddDbContextFactory<SchoolManagementDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+//builder.Services.AddDbContext<SchoolManagementDbContext>(options =>
+  //  options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+//.AddSignInManager();
+//.AddDefaultTokenProviders();
+
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
-    .AddEntityFrameworkStores<SchoolManagementDbContext>()
-    .AddSignInManager()
-    .AddDefaultTokenProviders();
+.AddEntityFrameworkStores<SchoolManagementDbContext>()
+.AddSignInManager<SignInManager<ApplicationUser>>()
+.AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
