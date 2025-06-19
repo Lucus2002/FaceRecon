@@ -2,13 +2,18 @@
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.FluentUI.AspNetCore.Components
 @using SchoolManagementApp.Models
+@using SchoolManagementApp.Services
 @using SixLabors.ImageSharp
 @using SixLabors.ImageSharp.Processing
+@using SixLabors.ImageSharp.PixelFormats
 
 @inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
 @inject NavigationManager NavigationManager
+@inject IFaceEmbeddingService FaceEmbeddingService
+@inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
+@implements IAsyncDisposable
 
 @if (Person == null)
 {
@@ -19,57 +24,34 @@ else
     <h4>Upload Photo for @Person.Name</h4>
 
     <FluentButton Appearance="Appearance.Accent">
-         Choose File
+        Choose File
     </FluentButton>
     <FluentInputFile OnInputFileChange="OnFileSelected"
                      Accept="image/*"
-                     Multiple="true"/>
+                     Multiple="true" />
 
- 
     <FluentButton @onclick="UploadPhotoAsync"
-                  Disabled="@(!SelectedFiles.Any())"
+                  Disabled="@(!SelectedFiles.Any() || isProcessing)"
                   Class="ms-2"
                   Appearance="Appearance.Accent">
-        Upload
+        @(isProcessing ? "Processing..." : "Upload")
     </FluentButton>
-
- @*    @if (ImagePreviews.Any())
-    {
-        <div class="mt-4 d-flex flex-wrap gap-3">
-            @foreach (var preview in ImagePreviews)
-            {
-                <FluentCard Style="width: 220px;">
-                    <img src="@preview" style="width: 100%; border-radius: 8px;" />
-                    <div class="p-2 text-center">
-                        <strong>Preview</strong>
-                    </div>
-                </FluentCard>
-            }
-        </div>
-    } *@
-
 
     @for (int i = 0; i < ImagePreviews.Count; i++)
     {
-        var index = i; // Safely capture index
-
+        var index = i;
         <FluentCard Style="width: 220px; position: relative;">
             <img src="@ImagePreviews[index]" style="width: 100%; border-radius: 8px;" />
-
             <FluentButton Style="position: absolute; top: 6px; right: 6px; z-index: 10;"
                           Appearance="Appearance.Stealth"
                           OnClick="@(() => RemovePreview(index))">
-                <i class="bi bi-trash"></i> 
+                <i class="bi bi-trash"></i>
             </FluentButton>
-
             <div class="p-2 text-center">
                 <strong>Preview</strong>
             </div>
         </FluentCard>
     }
-
-
-
 }
 
 @code {
@@ -80,13 +62,8 @@ else
     private List<IBrowserFile> SelectedFiles = new();
     private List<string> ImagePreviews = new();
     private List<string> UploadedPaths = new();
-
-    // private IBrowserFile? selectedFile;
-    // private string? UploadedPath;
-    //private bool IsFileSelected => selectedFile is not null;
-   // private FluentInputFile? inputFileRef;
-
-
+    private bool isProcessing = false;
+    private CancellationTokenSource cts = new();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -96,86 +73,115 @@ else
 
     private async void OnFileSelected(InputFileChangeEventArgs e)
     {
-        //SelectedFile = e.File;
-        // Get all selected image files and store them in a list
-        SelectedFiles = e.GetMultipleFiles().ToList();
-        ImagePreviews.Clear();
-
-        foreach (var file in SelectedFiles)
+        try
         {
-            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-            var base64 = Convert.ToBase64String(ms.ToArray());
-            var imageUrl = $"data:{file.ContentType};base64,{base64}";
-            ImagePreviews.Add(imageUrl);
-        }
+            SelectedFiles = e.GetMultipleFiles().ToList();
+            ImagePreviews.Clear();
 
-        StateHasChanged();
+            foreach (var file in SelectedFiles)
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                var imageUrl = $"data:{file.ContentType};base64,{base64}";
+                ImagePreviews.Add(imageUrl);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing file selection: {ex.Message}");
+        }
     }
 
- 
     private async Task UploadPhotoAsync()
     {
-        if (Person == null || !SelectedFiles.Any())
+        if (Person == null || !SelectedFiles.Any() || isProcessing)
             return;
 
-        // Sanitize the person's name to be used safely in the folder name (remove invalid characters)
-        var safeName = string.Join("_", Person.Name.Split(Path.GetInvalidFileNameChars()));
+        isProcessing = true;
+        StateHasChanged();
 
-        // Create a folder name based on PersonID and the sanitized name
-        var folderName = $"{Person.PersonID}_{safeName}";  
-        
-        // Relative path (from wwwroot) for saving images
-        var relativeFolder = Path.Combine("images", folderName);
-
-        // Absolute path on the server where images will be stored
-        var absoluteFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relativeFolder);
-
-        // Make the folder if it does not exist
-        Directory.CreateDirectory(absoluteFolder);
-
-        using var context = DbFactory.CreateDbContext();
-
-        foreach (var file in SelectedFiles)
+        try
         {
-            // Generate a unique file name to avoid overwriting existing files
-            var uniqueFileName = $"{Guid.NewGuid()}_{file.Name}";
+            using var context = DbFactory.CreateDbContext();
+            var safeName = string.Join("_", Person.Name.Split(Path.GetInvalidFileNameChars()));
+            var folderName = $"{Person.PersonID}_{safeName}";
+            var relativeFolder = Path.Combine("images", folderName);
+            var absoluteFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relativeFolder);
+            Directory.CreateDirectory(absoluteFolder);
 
-            // Full path where the image will be saved on the server
-            var absolutePath = Path.Combine(absoluteFolder, uniqueFileName);
+            foreach (var file in SelectedFiles)
+            {
+                if (cts.IsCancellationRequested) break;
 
-            // Convert file path to web-friendly format (forward slashes)
-            var relativePath = Path.Combine(relativeFolder, uniqueFileName).Replace("\\", "/");
+                var uniqueFileName = $"{Guid.NewGuid()}_{file.Name}";
+                var absolutePath = Path.Combine(absoluteFolder, uniqueFileName);
+                var relativePath = Path.Combine(relativeFolder, uniqueFileName).Replace("\\", "/");
 
-            // Resize the image to 300x300 using ImageSharp
-            await using var inputStream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
-            using var image = await SixLabors.ImageSharp.Image.LoadAsync(inputStream);
-
-            image.Mutate(x => x.Resize(300, 300));
-
-            // Save the file to the server
-            await using var outputStream = new FileStream(absolutePath, FileMode.Create);
-
-           // await file.OpenReadStream().CopyToAsync(outputStream);
-            await image.SaveAsJpegAsync(outputStream); // You can also use SaveAsPngAsync()
-
-            
-            context.PersonPhoto.Add(new PersonPhoto
+                try
                 {
-                    PersonID = Person.PersonID,
-                    Photopath = relativePath,
-                    CreatedDate = DateTime.Now
-                });
+                    // Process image for embedding
+                    await using var inputStream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                    using var memoryStream = new MemoryStream();
+                    await inputStream.CopyToAsync(memoryStream, cts.Token);
+                    var imageBytes = memoryStream.ToArray();
 
-            // Save the path for showing uploaded photos later
-            UploadedPaths.Add("/" + relativePath);
+                    // Generate embedding (silently continue if fails)
+                    try
+                    {
+                        var embedding = FaceEmbeddingService.GenerateEmbedding(imageBytes);
+                        // You can inspect embedding here via breakpoint
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Embedding generation failed: {ex.Message}");
+                    }
+
+                    // Process image for storage
+                    memoryStream.Position = 0;
+                    using var image = await Image.LoadAsync(memoryStream, cts.Token);
+                    image.Mutate(x => x.Resize(300, 300));
+                    await using var outputStream = new FileStream(absolutePath, FileMode.Create);
+                    await image.SaveAsJpegAsync(outputStream, cts.Token);
+
+                    context.PersonPhoto.Add(new PersonPhoto
+                    {
+                        PersonID = Person.PersonID,
+                        Photopath = relativePath,
+                        CreatedDate = DateTime.Now
+                    });
+
+                    UploadedPaths.Add("/" + relativePath);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Clean up if operation was canceled
+                    if (File.Exists(absolutePath))
+                        File.Delete(absolutePath);
+                    break;
+                }
+            }
+
+            if (!cts.IsCancellationRequested)
+            {
+                await context.SaveChangesAsync(cts.Token);
+            }
         }
-
-        await context.SaveChangesAsync();
-        // Clear selected files and image previews after successful upload
-        SelectedFiles.Clear();
-        ImagePreviews.Clear();
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Upload failed: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            if (!cts.IsCancellationRequested)
+            {
+                SelectedFiles.Clear();
+                ImagePreviews.Clear();
+                StateHasChanged();
+            }
+        }
     }
 
     private void RemovePreview(int index)
@@ -184,8 +190,13 @@ else
         {
             ImagePreviews.RemoveAt(index);
             SelectedFiles.RemoveAt(index);
-            StateHasChanged(); 
+            StateHasChanged();
         }
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        cts.Cancel();
+        cts.Dispose();
+    }
 }

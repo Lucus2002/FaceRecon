@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UMapx.Core;
 
-namespace SchoolManagement.Service
+namespace SchoolManagementApp.Service
 {
     /// <summary>
     /// Defines the embeddings database.
