@@ -18,9 +18,9 @@ var configOptions = new ChromaConfigurationOptions(uri: "http://localhost:8000/a
 using var httpClient = new HttpClient();
 var client = new ChromaClient(configOptions, httpClient);
 //create DB
-var collection = await client.GetOrCreateCollection("FaceEmbedding");
+var collection = await client.GetOrCreateCollection("face_embeddings");
 var collectionClient = new ChromaCollectionClient(collection, configOptions, httpClient);
-// Initialize embedding generator (using Ollama in this example)
+// Initialize embedding generator
 var generator = new OllamaEmbeddingGenerator(new Uri("http://localhost:11434"), modelId: "all-minilm");
 
 
