@@ -13,6 +13,8 @@ using SchoolManagementApp.Service;
 using SchoolManagementApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 var configOptions = new ChromaConfigurationOptions(uri: "http://localhost:8000/api/v1/");
 using var httpClient = new HttpClient();
@@ -23,6 +25,27 @@ var collectionClient = new ChromaCollectionClient(collection, configOptions, htt
 // Initialize embedding generator
 var generator = new OllamaEmbeddingGenerator(new Uri("http://localhost:11434"), modelId: "all-minilm");
 
+
+//async Task SaveEmbedding(string personPhotoId, float[] embedding)
+//{
+//    try
+//    {
+//        // Convert float[] to Chroma's required type
+//        var embeddingMemory = new ReadOnlyMemory<float>(embedding);
+
+//        await collectionClient.Add(
+//            ids: new List<string> { personPhotoId },
+//            embeddings: new List<ReadOnlyMemory<float>> { embeddingMemory },
+//            metadatas: new List<Dictionary<string, object>>
+//            {
+//                new Dictionary<string, object> { {"personPhotoId", personPhotoId } }
+//            });
+//    }
+//    catch (Exception ex)
+//    {
+//        Console.WriteLine($"Couldn't save to Chroma: {ex.Message}");
+//    }
+//}
 
 #region Services
 // Add services to the container.
@@ -38,6 +61,7 @@ builder.Services.AddSingleton<IFaceEmbeddingService, FaceEmbeddingService>(provi
     service.Initialize();
     return service;
 });
+builder.Services.AddSingleton<IFaceEmbeddingStore, ChromaFaceService>();
 builder.Services.AddSingleton<Embeddings>();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();

@@ -1,17 +1,21 @@
 @page "/photo"
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.AI
 @using Microsoft.FluentUI.AspNetCore.Components
 @using SchoolManagementApp.Models
 @using SchoolManagementApp.Services
 @using SixLabors.ImageSharp
 @using SixLabors.ImageSharp.Processing
 @using SixLabors.ImageSharp.PixelFormats
+@using SchoolManagementApp
 
 @inject IDbContextFactory<SchoolManagementApp.Data.SchoolManagementDbContext> DbFactory
 @inject NavigationManager NavigationManager
 @inject IFaceEmbeddingService FaceEmbeddingService
+@inject IFaceEmbeddingStore FaceStore
 @inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
+
 
 @implements IAsyncDisposable
 
@@ -127,11 +131,24 @@ else
                     await inputStream.CopyToAsync(memoryStream, cts.Token);
                     var imageBytes = memoryStream.ToArray();
 
-                    // Generate embedding (silently continue if fails)
+                    // Create and save the photo first
+                    var personPhoto = new PersonPhoto
+                    {
+                        PersonID = Person.PersonID,
+                        Photopath = relativePath,
+                        CreatedDate = DateTime.Now
+                    };
+                    context.PersonPhoto.Add(personPhoto);
+                    await context.SaveChangesAsync(cts.Token);
+
+                    // Generate and store embedding
                     try
                     {
                         var embedding = FaceEmbeddingService.GenerateEmbedding(imageBytes);
-                        // You can inspect embedding here via breakpoint
+                        await FaceStore.StoreEmbeddingAsync(
+                        personId: Person.PersonID,
+                        photoId: personPhoto.PersonPhotoID,
+                        embedding: embedding);
                     }
                     catch (Exception ex)
                     {
@@ -145,27 +162,14 @@ else
                     await using var outputStream = new FileStream(absolutePath, FileMode.Create);
                     await image.SaveAsJpegAsync(outputStream, cts.Token);
 
-                    context.PersonPhoto.Add(new PersonPhoto
-                    {
-                        PersonID = Person.PersonID,
-                        Photopath = relativePath,
-                        CreatedDate = DateTime.Now
-                    });
-
                     UploadedPaths.Add("/" + relativePath);
                 }
                 catch (OperationCanceledException)
                 {
-                    // Clean up if operation was canceled
                     if (File.Exists(absolutePath))
                         File.Delete(absolutePath);
                     break;
                 }
-            }
-
-            if (!cts.IsCancellationRequested)
-            {
-                await context.SaveChangesAsync(cts.Token);
             }
         }
         catch (Exception ex)
@@ -183,7 +187,102 @@ else
             }
         }
     }
+     #region Upload Logic
+    // private async Task UploadPhotoAsync()
+    // {
+    //     if (Person == null || !SelectedFiles.Any() || isProcessing)
+    //         return;
 
+    //     isProcessing = true;
+    //     StateHasChanged();
+
+    //     try
+    //     {
+    //         using var context = DbFactory.CreateDbContext();
+    //         var safeName = string.Join("_", Person.Name.Split(Path.GetInvalidFileNameChars()));
+    //         var folderName = $"{Person.PersonID}_{safeName}";
+    //         var relativeFolder = Path.Combine("images", folderName);
+    //         var absoluteFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relativeFolder);
+    //         Directory.CreateDirectory(absoluteFolder);
+
+    //         foreach (var file in SelectedFiles)
+    //         {
+    //             if (cts.IsCancellationRequested) break;
+
+    //             var uniqueFileName = $"{Guid.NewGuid()}_{file.Name}";
+    //             var absolutePath = Path.Combine(absoluteFolder, uniqueFileName);
+    //             var relativePath = Path.Combine(relativeFolder, uniqueFileName).Replace("\\", "/");
+
+    //             try
+    //             {
+    //                 // Process image for embedding
+    //                 await using var inputStream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+    //                 using var memoryStream = new MemoryStream();
+    //                 await inputStream.CopyToAsync(memoryStream, cts.Token);
+    //                 var imageBytes = memoryStream.ToArray();
+
+    //                 // Generate embedding (silently continue if fails)
+    //                 try
+    //                 {
+    //                     var embedding = FaceEmbeddingService.GenerateEmbedding(imageBytes);
+    //                     var personPhoto = new PersonPhoto
+    //                     {
+    //                         PersonID = Person.PersonID,
+    //                         Photopath = relativePath,
+    //                         CreatedDate = DateTime.Now
+    //                     };
+    //                 }
+    //                 catch (Exception ex)
+    //                 {
+    //                     Console.WriteLine($"Embedding generation failed: {ex.Message}");
+    //                 }
+
+    //                 // Process image for storage
+    //                 memoryStream.Position = 0;
+    //                 using var image = await Image.LoadAsync(memoryStream, cts.Token);
+    //                 image.Mutate(x => x.Resize(300, 300));
+    //                 await using var outputStream = new FileStream(absolutePath, FileMode.Create);
+    //                 await image.SaveAsJpegAsync(outputStream, cts.Token);
+
+    //                 context.PersonPhoto.Add(new PersonPhoto
+    //                 {
+    //                     PersonID = Person.PersonID,
+    //                     Photopath = relativePath,
+    //                     CreatedDate = DateTime.Now
+    //                 });
+
+    //                 UploadedPaths.Add("/" + relativePath);
+    //             }
+    //             catch (OperationCanceledException)
+    //             {
+    //                 // Clean up if operation was canceled
+    //                 if (File.Exists(absolutePath))
+    //                     File.Delete(absolutePath);
+    //                 break;
+    //             }
+    //         }
+
+    //         if (!cts.IsCancellationRequested)
+    //         {
+    //             await context.SaveChangesAsync(cts.Token);
+    //         }
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         Console.WriteLine($"Upload failed: {ex.Message}");
+    //     }
+    //     finally
+    //     {
+    //         isProcessing = false;
+    //         if (!cts.IsCancellationRequested)
+    //         {
+    //             SelectedFiles.Clear();
+    //             ImagePreviews.Clear();
+    //             StateHasChanged();
+    //         }
+    //     }
+    // }
+     #endregion
     private void RemovePreview(int index)
     {
         if (index >= 0 && index < ImagePreviews.Count && index < SelectedFiles.Count)
