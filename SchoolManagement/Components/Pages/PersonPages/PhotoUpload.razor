@@ -149,6 +149,8 @@ else
                         personId: Person.PersonID,
                         photoId: personPhoto.PersonPhotoID,
                         embedding: embedding);
+                        var currentCount = await FaceStore.GetEmbeddingsCountAsync();
+                        Console.WriteLine($"Success! Total embeddings stored: {currentCount}");
                     }
                     catch (Exception ex)
                     {

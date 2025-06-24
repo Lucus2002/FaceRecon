@@ -1,5 +1,7 @@
 ﻿using ChromaDB.Client;
+using Microsoft.CodeAnalysis;
 using System.Net.Http;
+using System.Numerics;
 
 namespace SchoolManagementApp.Services
 {
@@ -7,7 +9,7 @@ namespace SchoolManagementApp.Services
     {
         private readonly HttpClient _httpClient = new();
         private readonly ChromaClient _client;
-        private const string CollectionName = "face_embeddings";
+        private const string CollectionName = "FaceEmbedding2406";
 
         public ChromaFaceService()
         {
@@ -21,6 +23,7 @@ namespace SchoolManagementApp.Services
             var collectionClient = new ChromaCollectionClient(collection,
                 new ChromaConfigurationOptions("http://localhost:8000/api/v1/"),
                 _httpClient);
+            //await collectionClient.Add([review.Ids], [vector], [metadata]);
 
             await collectionClient.Add(
                 ids: new List<string> { photoId.ToString() },
@@ -35,7 +38,15 @@ namespace SchoolManagementApp.Services
                     }
                 });
         }
-
+        public async Task<int> GetEmbeddingsCountAsync()
+        {
+            var collection = await _client.GetOrCreateCollection(CollectionName);
+            var collectionClient = new ChromaCollectionClient(collection,
+                new ChromaConfigurationOptions("http://localhost:8000/api/v1/"),
+                _httpClient);
+            var count = await collectionClient.Count();
+            return count;
+        }
         //public async Task<List<(int PhotoId, float Score)>> FindSimilarFacesAsync(float[] embedding, int limit = 5)
         //{
         //    var collection = await _client.GetOrCreateCollection(CollectionName);
